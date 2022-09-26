@@ -156,55 +156,6 @@ double CLOMP_error_bound = 0.0;
  */
 double CLOMP_tightest_error_bound = 0.0;
 
-#ifdef WITH_MPI
-/* Redirect printf and fprintf to MPI-aware versions.   Prevents having
- * to rewrite most of the CLOMP I/O code.
- */
-#undef printf
-#define printf clomp_mpi_printf
-#undef fprintf
-#define fprintf clomp_mpi_fprintf
-
-void clomp_mpi_printf(const char *fmt, ...)
-{
-    int ret;
-    va_list args;
-
-    /* Only output from rank 0 for now */
-    if (rank == 0)
-    {
-        va_start(args, fmt);
-        ret = vprintf(fmt, args);
-        va_end(args);
-    }
-}
-
-void clomp_mpi_fprintf(FILE *out, const char *fmt, ...)
-{
-    int ret;
-    va_list args;
-
-    /* Only output from rank 0 for now */
-    if (rank == 0)
-    {
-        va_start(args, fmt);
-        ret = vfprintf(out, fmt, args);
-        va_end(args);
-    }
-}
-
-/* Need a way for tasks other than task 0 to print something for debugging */
-void unfiltered_printf(const char *fmt, ...)
-{
-    int ret;
-    va_list args;
-
-    va_start(args, fmt);
-    ret = vprintf(fmt, args);
-    va_end(args);
-}
-#endif
-
 void print_usage()
 {
     fprintf(stderr,
@@ -1000,27 +951,17 @@ int main(int argc, char *argv[])
     char startdate[50]; /* Must be > 26 characters */
     long partId, zoneId;
     double totalZoneCount;
-    Zone *zone, *prev_zone;
+    // Zone *zone, *prev_zone;
     double deposit, residue, percent_residue, part_deposit_bound;
     double deposit_diff_bound;
     double diterations;
     struct timeval calc_deposit_start_ts, calc_deposit_end_ts;
     double calc_deposit_seconds;
-    struct timeval omp_barrier_start_ts, omp_barrier_end_ts;
-    double omp_barrier_seconds;
     struct timeval serial_ref_start_ts, serial_ref_end_ts;
     double serial_ref_seconds;
-    struct timeval bestcase_omp_start_ts, bestcase_omp_end_ts;
-    double bestcase_omp_seconds;
-    struct timeval static_omp_start_ts, static_omp_end_ts;
-    double static_omp_seconds;
-    struct timeval manual_omp_start_ts, manual_omp_end_ts;
-    double manual_omp_seconds;
-    struct timeval dynamic_omp_start_ts, dynamic_omp_end_ts;
-    double dynamic_omp_seconds;
     int bidx, aidx;
-    Part *sorted_part_list;
-    Part *part;
+    // Part *sorted_part_list;
+    // Part *part;
 
     /* Get executable name by pointing to argv[0] */
     CLOMP_exe_name = argv[0];
@@ -1114,7 +1055,7 @@ int main(int argc, char *argv[])
      * specified.   If threads are used, it may lay out the memory on
      * NUMA system better for threaded computation.
      */
-    //omp_set_num_threads((int)CLOMP_allocThreads);
+    // omp_set_num_threads((int)CLOMP_allocThreads);
 
     /* Allocate part pointer array */
     partArray = (Part **)malloc(CLOMP_numParts * sizeof(Part *));
@@ -1312,7 +1253,7 @@ int main(int argc, char *argv[])
      * specified. Because we are using alloc threads also, have to explicitly
      * set even if using system default
      */
-    //omp_set_num_threads((int)CLOMP_numThreads);
+    // omp_set_num_threads((int)CLOMP_numThreads);
 
     /* Print initial line bar separator */
     printf("---------------------\n");
@@ -1359,10 +1300,7 @@ int main(int argc, char *argv[])
     print_pseudocode("Serial Ref", "  update_part (partArray[pidx], deposit);");
     print_pseudocode("Serial Ref", "------- End Serial Ref Pseudocode -------");
     print_start_message("Serial Ref");
-#ifdef WITH_MPI
-    /* Ensure all MPI tasks run OpenMP at the same time */
-    MPI_Barrier(MPI_COMM_WORLD);
-#endif
+
     get_timestamp(&serial_ref_start_ts);
     do_serial_ref_version();
     get_timestamp(&serial_ref_end_ts);
@@ -1376,8 +1314,8 @@ int main(int argc, char *argv[])
     serial_ref_seconds = print_timestats("Serial Ref", &serial_ref_start_ts,
                                          &serial_ref_end_ts, -1.0, -1.0);
 
-        printf("----------- Comma-delimited summary ----------\n");
-    printf("%s %ld %ld %ld %ld %ld %ld %ld, calc_deposit, OMP Barrier, Serial Ref, Bestcase OMP, Static OMP, Dynamic OMP, Manual OMP\n",
+    printf("----------- Comma-delimited summary ----------\n");
+    printf("%s %ld %ld %ld %ld %ld %ld %ld, calc_deposit, Serial Ref\n",
            CLOMP_exe_name,
            CLOMP_numThreads,
            CLOMP_inputAllocThreads,
@@ -1387,62 +1325,18 @@ int main(int argc, char *argv[])
            CLOMP_flopScale,
            CLOMP_timeScale);
 
-    printf("Runtime, %7.3f, %7.3f, %7.3f, %7.3f, %7.3f, %7.3f, %7.3f\n",
-           calc_deposit_seconds,
-           omp_barrier_seconds,
-           serial_ref_seconds,
-           bestcase_omp_seconds,
-           static_omp_seconds,
-           dynamic_omp_seconds,
-           manual_omp_seconds);
+    printf("Runtime, %7.3f, %7.3f\n", calc_deposit_seconds, serial_ref_seconds);
 
 #undef us_loop
 #define us_loop(sec) (((sec * 1000000.0) / ((double)CLOMP_num_iterations * 10.0)))
-    printf("us/Loop, %7.2f, %7.2f, %7.2f, %7.2f, %7.2f, %7.2f, %7.2f\n",
-           us_loop(calc_deposit_seconds),
-           us_loop(omp_barrier_seconds),
-           us_loop(serial_ref_seconds),
-           us_loop(bestcase_omp_seconds),
-           us_loop(static_omp_seconds),
-           us_loop(dynamic_omp_seconds),
-           us_loop(manual_omp_seconds));
+    printf("us/Loop, %7.2f, %7.2f\n", us_loop(calc_deposit_seconds), us_loop(serial_ref_seconds));
 
 #undef speedup
 #define speedup(sec) ((serial_ref_seconds / sec))
-    printf("Speedup,     N/A,     N/A, %7.1f, %7.1f, %7.1f, %7.1f, %7.1f\n",
-           speedup(serial_ref_seconds),
-           speedup(bestcase_omp_seconds),
-           speedup(static_omp_seconds),
-           speedup(dynamic_omp_seconds),
-           speedup(manual_omp_seconds));
-
-#undef efficacy
-#define efficacy(sec) (((bestcase_omp_seconds / sec) * 100.0))
-    printf("Efficacy,    N/A,     N/A,     N/A,  %6.1f%%, %6.1f%%, %6.1f%%, %6.1f%%\n",
-           efficacy(bestcase_omp_seconds),
-           efficacy(static_omp_seconds),
-           efficacy(dynamic_omp_seconds),
-           efficacy(manual_omp_seconds));
-
-#undef overhead
-#define overhead(sec) (((sec - bestcase_omp_seconds) * 1000000.0) / ((double)CLOMP_num_iterations * 10.0))
-    printf("Overhead,    N/A,     N/A,     N/A, %7.2f, %7.2f, %7.2f, %7.2f\n",
-           overhead(bestcase_omp_seconds),
-           overhead(static_omp_seconds),
-           overhead(dynamic_omp_seconds),
-           overhead(manual_omp_seconds));
+    printf("Speedup,     N/A,     N/A, %7.1f\n", speedup(serial_ref_seconds));
 
     {
-        char mpi_marker[100] = "";
-#ifdef WITH_MPI
-        /* Denote how many MPI tasks were used to generate stats if
-         * actually ran more than 1 MPI task.
-         */
-        if (numtasks > 1)
-            sprintf(mpi_marker, "%d MPI X ", numtasks);
-#endif
-        printf("CORAL RFP, %s%ld %ld %ld %ld %ld %ld %ld, %.2f, %.2f, %.1f, %.2f, %.1f, %.2f, %.1f, %.2f, %.1f\n",
-               mpi_marker,
+        printf("CORAL RFP, %ld %ld %ldßß %ld %ld %ld %ld, %.2f\n",
                CLOMP_numThreads,
                CLOMP_inputAllocThreads,
                CLOMP_numParts,
@@ -1450,20 +1344,10 @@ int main(int argc, char *argv[])
                CLOMP_zoneSize,
                CLOMP_flopScale,
                CLOMP_timeScale,
-               us_loop(serial_ref_seconds),
-               us_loop(omp_barrier_seconds),
-               speedup(bestcase_omp_seconds),
-               overhead(static_omp_seconds),
-               speedup(static_omp_seconds),
-               overhead(dynamic_omp_seconds),
-               speedup(dynamic_omp_seconds),
-               overhead(manual_omp_seconds),
-               speedup(manual_omp_seconds));
+               us_loop(serial_ref_seconds));
     }
-
-#ifdef WITH_MPI
-    MPI_Finalize();
-#endif
 
     return (0);
 }
+
+// ./clomp 16 1 16 400 32 1 100
