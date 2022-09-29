@@ -1336,7 +1336,7 @@ int main(int argc, char *argv[])
     printf("Speedup,     N/A,     N/A, %7.1f\n", speedup(serial_ref_seconds));
 
     {
-        printf("CORAL RFP, %ld %ld %ldßß %ld %ld %ld %ld, %.2f\n",
+        printf("CORAL RFP, %ld %ld %ld %ld %ld %ld %ld, %.2f\n",
                CLOMP_numThreads,
                CLOMP_inputAllocThreads,
                CLOMP_numParts,
